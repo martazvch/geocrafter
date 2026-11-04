@@ -40,6 +40,10 @@ pub fn init(window: *c.SDL_Window, config: App.Config, ctx: *const App.Context) 
             var tri = try @import("scenes/cube.zig").init(ctx.alloc, device, tex_format, DEPTH_FORMAT);
             break :scene tri.scene();
         },
+        .cube_sphere => {
+            var tri = try @import("scenes/cube_sphere.zig").init(ctx.alloc, device, tex_format, DEPTH_FORMAT);
+            break :scene tri.scene();
+        },
     };
 
     const depth_tex = try errify(c.SDL_CreateGPUTexture(device, &.{
@@ -86,7 +90,7 @@ pub fn drawFrame(self: *Self, cam: *Camera, ctx: App.Context) Error!void {
         target.load_op = c.SDL_GPU_LOADOP_CLEAR;
         target.store_op = c.SDL_GPU_STOREOP_STORE;
 
-        try self.scene.update(self.device, cmd, cam);
+        try self.scene.update(self.device, cmd, cam, ctx.scene_state);
 
         var depth = std.mem.zeroes(c.SDL_GPUDepthStencilTargetInfo);
         depth.texture = self.depth_tex;
@@ -99,7 +103,7 @@ pub fn drawFrame(self: *Self, cam: *Camera, ctx: App.Context) Error!void {
         depth.cycle = true;
 
         const pass = try errify(c.SDL_BeginGPURenderPass(cmd, &target, 1, &depth));
-        try self.scene.draw(pass, ctx.draw_config);
+        try self.scene.draw(pass, ctx.scene_state);
         c.SDL_EndGPURenderPass(pass);
     }
 

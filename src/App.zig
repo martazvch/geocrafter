@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const c = @import("c");
+const m = @import("math");
 const utils = @import("utils.zig");
 const errify = utils.errify;
 const Error = utils.Error;
@@ -28,12 +29,13 @@ pub const Config = struct {
         triangle,
         triangle_dyn,
         cube,
+        cube_sphere,
     };
 };
 
 pub const Context = struct {
     alloc: Allocator,
-    draw_config: Scene.DrawConfig,
+    scene_state: Scene.State,
 };
 
 pub fn init(alloc: Allocator, config: Config) Error!Self {
@@ -41,7 +43,7 @@ pub fn init(alloc: Allocator, config: Config) Error!Self {
 
     const ctx: Context = .{
         .alloc = alloc,
-        .draw_config = .{},
+        .scene_state = .{},
     };
 
     const window = try errify(c.SDL_CreateWindow(
@@ -68,51 +70,57 @@ pub fn deinit(self: *Self) void {
 }
 
 pub fn run(self: *Self) Error!void {
-    if (builtin.mode == .debug) {
-        var frames: usize = 0;
-        var last_time = c.SDL_GetTicks();
+    var frames: usize = 0;
+    var last_time = c.SDL_GetTicksNS();
 
-        while (self.running) {
+    while (self.running) {
+        const cur_time = c.SDL_GetTicksNS();
+        const dt = cur_time - last_time;
+
+        if (builtin.mode == .debug) {
             frames += 1;
-            const cur_time = c.SDL_GetTicks();
-
-            if (cur_time - last_time >= 1000) {
+            if (dt >= 1_000_000) {
                 var buf: [100]u8 = undefined;
                 const written = std.fmt.bufPrintSentinel(&buf, "Geocrafter - FPS {}", .{frames}, 0) catch utils.oom();
                 try errify(c.SDL_SetWindowTitle(self.window, written));
                 last_time = cur_time;
                 frames = 0;
             }
-
-            try self.frame();
         }
 
-        return;
-    }
-
-    while (self.running) {
-        try self.frame();
+        try self.frame(@floatCast(@as(f64, @floatFromInt(dt)) / 1e9));
     }
 }
 
 fn handleEvents(self: *Self) void {
-    var ev: c.SDL_Event = undefined;
-    while (c.SDL_PollEvent(&ev)) {
-        // First: ImGui_ImplSDL3_ProcessEvent(&ev)
-        switch (ev.type) {
+    var event: c.SDL_Event = undefined;
+    while (c.SDL_PollEvent(&event)) {
+        // First: ImGui_ImplSDL3_ProcessEvent(&event)
+        switch (event.type) {
             c.SDL_EVENT_QUIT => self.running = false,
             c.SDL_EVENT_MOUSE_MOTION => {
-                const left_down = (ev.motion.state & c.SDL_BUTTON_LMASK) != 0;
-                if (left_down and !self.ui_wants_mouse) {
-                    // self.camera.orbit(ev.motion.xrel, ev.motion.yrel);
+                if (event.button.button == c.SDL_BUTTON_MIDDLE) {
+                    self.ctx.scene_state.dragging = true;
+                }
+
+                if ((event.motion.state & c.SDL_BUTTON_MMASK) != 0) {
+                    const mvt = m.Vec2.new(event.motion.xrel, event.motion.yrel);
+                    const state = &self.ctx.scene_state;
+                    state.mouse_mvt = if (state.mouse_mvt) |d| d.add(mvt) else mvt;
                 }
             },
-            c.SDL_EVENT_KEY_DOWN => switch (ev.key.key) {
+            c.SDL_EVENT_MOUSE_BUTTON_UP => {
+                if (event.button.button == c.SDL_BUTTON_MIDDLE) {
+                    self.ctx.scene_state.dragging = false;
+                }
+            },
+            c.SDL_EVENT_KEY_DOWN => switch (event.key.key) {
                 c.SDLK_Q, c.SDLK_ESCAPE => self.running = false,
-                c.SDLK_W => self.ctx.draw_config.wireframe = !self.ctx.draw_config.wireframe,
+                c.SDLK_W => self.ctx.scene_state.wireframe = !self.ctx.scene_state.wireframe,
                 else => {},
             },
             c.SDL_EVENT_MOUSE_WHEEL => {
+                self.camera.zoom(event.wheel.y);
                 // if (!self.ui_wants_mouse) self.camera.zoom(ev.wheel.y, self.planet.params.radius);
             },
             else => {},
@@ -130,8 +138,9 @@ fn drawUi(self: *Self) void {
     _ = self;
 }
 
-/// One frame: events -> UI -> update -> render.
-pub fn frame(self: *Self) Error!void {
+pub fn frame(self: *Self, dt: f32) Error!void {
+    self.ctx.scene_state.dt = dt;
+    self.ctx.scene_state.mouse_mvt = null;
     self.handleEvents();
     self.drawUi();
     // if (self.planet.dirty.any()) self.planet.regenerate(&self.renderer);

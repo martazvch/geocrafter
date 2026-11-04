@@ -69,7 +69,7 @@ pub fn init(alloc: Allocator, device: *c.SDL_GPUDevice, tex_format: c.SDL_GPUTex
     return self;
 }
 
-fn update(s: *anyopaque, device: *c.SDL_GPUDevice, cmd: *c.SDL_GPUCommandBuffer, _: *const Camera) Error!void {
+fn update(s: *anyopaque, device: *c.SDL_GPUDevice, cmd: *c.SDL_GPUCommandBuffer, _: *const Camera, _: Scene.State) Error!void {
     const self: *Self = @ptrCast(@alignCast(s));
 
     const uniform: Uniform = .{
@@ -107,7 +107,7 @@ fn update(s: *anyopaque, device: *c.SDL_GPUDevice, cmd: *c.SDL_GPUCommandBuffer,
     c.SDL_EndGPUCopyPass(copy_pass);
 }
 
-fn draw(s: *anyopaque, render_pass: *c.SDL_GPURenderPass, _: Scene.DrawConfig) Error!void {
+fn draw(s: *anyopaque, render_pass: *c.SDL_GPURenderPass, _: Scene.State) Error!void {
     const self: *Self = @ptrCast(@alignCast(s));
 
     // Draw

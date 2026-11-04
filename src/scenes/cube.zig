@@ -144,7 +144,7 @@ pub fn init(alloc: Allocator, device: *c.SDL_GPUDevice, tex_format: c.SDL_GPUTex
     return self;
 }
 
-fn update(_: *anyopaque, _: *c.SDL_GPUDevice, cmd: *c.SDL_GPUCommandBuffer, cam: *const Camera) Error!void {
+fn update(_: *anyopaque, _: *c.SDL_GPUDevice, cmd: *c.SDL_GPUCommandBuffer, cam: *const Camera, _: Scene.State) Error!void {
     const model: m.Mat4 = .createAngleAxis(.unitY, @as(f32, (@floatFromInt(c.SDL_GetTicksNS()))) / 1e9);
     const cam_uniform: CamUniform = .{
         .mvp = model.mul(cam.view).mul(cam.proj),
@@ -154,7 +154,7 @@ fn update(_: *anyopaque, _: *c.SDL_GPUDevice, cmd: *c.SDL_GPUCommandBuffer, cam:
     c.SDL_PushGPUFragmentUniformData(cmd, 0, &cam_uniform, @sizeOf(CamUniform));
 }
 
-fn draw(s: *anyopaque, render_pass: *c.SDL_GPURenderPass, config: Scene.DrawConfig) Error!void {
+fn draw(s: *anyopaque, render_pass: *c.SDL_GPURenderPass, config: Scene.State) Error!void {
     const self: *Self = @ptrCast(@alignCast(s));
 
     if (config.wireframe) {

@@ -93,7 +93,7 @@ pub fn init(alloc: Allocator, device: *c.SDL_GPUDevice, tex_format: c.SDL_GPUTex
     return self;
 }
 
-fn update(_: *anyopaque, _: *c.SDL_GPUDevice, cmd: *c.SDL_GPUCommandBuffer, _: *const Camera) Error!void {
+fn update(_: *anyopaque, _: *c.SDL_GPUDevice, cmd: *c.SDL_GPUCommandBuffer, _: *const Camera, _: Scene.State) Error!void {
     // Uniforms
     const uniform: Uniform = .{
         .float = @as(f32, (@floatFromInt(c.SDL_GetTicksNS()))) / 1e9,
@@ -102,7 +102,7 @@ fn update(_: *anyopaque, _: *c.SDL_GPUDevice, cmd: *c.SDL_GPUCommandBuffer, _: *
     c.SDL_PushGPUFragmentUniformData(cmd, 0, &uniform, @sizeOf(Uniform));
 }
 
-fn draw(s: *anyopaque, render_pass: *c.SDL_GPURenderPass, _: Scene.DrawConfig) Error!void {
+fn draw(s: *anyopaque, render_pass: *c.SDL_GPURenderPass, _: Scene.State) Error!void {
     const self: *Self = @ptrCast(@alignCast(s));
 
     c.SDL_BindGPUGraphicsPipeline(render_pass, self.pipeline);
