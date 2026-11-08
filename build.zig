@@ -20,12 +20,6 @@ pub fn build(b: *std.Build) void {
     });
     const sdl_lib = sdl_dep.artifact("SDL3");
 
-    const imgui_dep = b.dependency("zimgui", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    const imgui_lib = imgui_dep.artifact("imgui");
-
     const zlm_dep = b.dependency("zlm", .{
         .target = target,
         .optimize = optimize,
@@ -34,6 +28,12 @@ pub fn build(b: *std.Build) void {
     const clarg_dep = b.dependency("clarg", .{
         .target = target,
         .optimize = optimize,
+    });
+
+    const dvui_dep = b.dependency("dvui", .{
+        .target = target,
+        .optimize = optimize,
+        .backend = .sdl3gpu,
     });
 
     const math_mod = b.createModule(.{
@@ -51,10 +51,11 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "math", .module = math_mod },
             .{ .name = "clarg", .module = clarg_dep.module("clarg") },
+            .{ .name = "dvui", .module = dvui_dep.module("dvui_sdl3gpu") },
+            .{ .name = "sdl3gpu-backend", .module = dvui_dep.module("sdl3gpu") },
         },
     });
     mod.linkLibrary(sdl_lib);
-    mod.linkLibrary(imgui_lib);
 
     const exe = b.addExecutable(.{
         .name = "geocrafter",

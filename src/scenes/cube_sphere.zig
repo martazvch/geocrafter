@@ -13,8 +13,10 @@ const m = @import("math");
 
 vert_buf: *c.SDL_GPUBuffer,
 idx_buf: *c.SDL_GPUBuffer,
+quad_buf: *c.SDL_GPUBuffer,
 pipeline_fill: *c.SDL_GPUGraphicsPipeline,
 pipeline_line: *c.SDL_GPUGraphicsPipeline,
+pipeline_points: *c.SDL_GPUGraphicsPipeline,
 cube: Cube,
 orientation: m.Mat4 = .identity,
 spin: m.Vec3 = .zero,
@@ -122,29 +124,65 @@ const CamUniform = extern struct {
     model: m.Mat4,
 };
 
-pub fn init(alloc: Allocator, device: *c.SDL_GPUDevice, tex_format: c.SDL_GPUTextureFormat, depth_format: c.SDL_GPUTextureFormat) Error!*Self {
+const QuadVertex = extern struct {
+    x: f32,
+    y: f32,
+};
+
+const QUAD_VERTICES = [_]QuadVertex{
+    .{ .x = -1, .y = -1 },
+    .{ .x = 1, .y = -1 },
+    .{ .x = -1, .y = 1 },
+
+    .{ .x = -1, .y = 1 },
+    .{ .x = 1, .y = -1 },
+    .{ .x = 1, .y = 1 },
+};
+
+const cube_sphere_vert_buf = [_]c.SDL_GPUVertexBufferDescription{.{
+    .slot = 0,
+    .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX,
+    .pitch = @sizeOf(Vertex),
+    .instance_step_rate = 0,
+}};
+const cube_sphere_attrs = [_]c.SDL_GPUVertexAttribute{
+    .{ .buffer_slot = 0, .location = 0, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, .offset = 0 },
+    .{ .buffer_slot = 0, .location = 1, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, .offset = 3 * @sizeOf(f32) },
+};
+
+pub fn init(alloc: Allocator, device: *c.SDL_GPUDevice, tex_format: c.SDL_GPUTextureFormat, depth_format: c.SDL_GPUTextureFormat) Error!Self {
     const pipeline_fill = try gfx.Pipeline.create(alloc, device, "cube", .{
-        .vertex_pitch = @sizeOf(Vertex),
         .tex_format = tex_format,
         .depth_format = depth_format,
-        .attrs = &[_]c.SDL_GPUVertexAttribute{
-            .{ .buffer_slot = 0, .location = 0, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, .offset = 0 },
-            .{ .buffer_slot = 0, .location = 1, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, .offset = 3 * @sizeOf(f32) },
-        },
+        .vert_buffers = &cube_sphere_vert_buf,
+        .attrs = &cube_sphere_attrs,
     });
     errdefer c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline_fill);
 
     const pipeline_line = try gfx.Pipeline.create(alloc, device, "cube", .{
-        .vertex_pitch = @sizeOf(Vertex),
         .tex_format = tex_format,
         .depth_format = depth_format,
         .fill_mode = c.SDL_GPU_FILLMODE_LINE,
-        .attrs = &[_]c.SDL_GPUVertexAttribute{
-            .{ .buffer_slot = 0, .location = 0, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, .offset = 0 },
-            .{ .buffer_slot = 0, .location = 1, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, .offset = 3 * @sizeOf(f32) },
-        },
+        .vert_buffers = &cube_sphere_vert_buf,
+        .attrs = &cube_sphere_attrs,
     });
     errdefer c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline_line);
+
+    const pipeline_points = try gfx.Pipeline.create(alloc, device, "points", .{
+        .tex_format = tex_format,
+        .depth_format = depth_format,
+        .enable_depth = false,
+        .vert_buffers = &.{
+            .{ .slot = 0, .pitch = @sizeOf(QuadVertex), .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX, .instance_step_rate = 0 },
+            .{ .slot = 1, .pitch = @sizeOf(Vertex), .input_rate = c.SDL_GPU_VERTEXINPUTRATE_INSTANCE, .instance_step_rate = 0 },
+        },
+        .attrs = &.{
+            .{ .buffer_slot = 0, .location = 0, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, .offset = 0 },
+            // TODO: could use location 0?
+            .{ .buffer_slot = 1, .location = 1, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, .offset = 0 },
+        },
+    });
+    errdefer c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline_points);
 
     const cube = makeCube(alloc, 50);
 
@@ -158,8 +196,13 @@ pub fn init(alloc: Allocator, device: *c.SDL_GPUDevice, tex_format: c.SDL_GPUTex
     const idx_buf = try gfx.Buffer.createVertBuf(device, idx_size);
     errdefer c.SDL_ReleaseGPUBuffer(device, idx_buf);
 
+    // Points
+    const quad_size: u32 = @sizeOf(@TypeOf(QUAD_VERTICES));
+    const quad_buf = try gfx.Buffer.createVertBuf(device, quad_size);
+    errdefer c.SDL_ReleaseGPUBuffer(device, quad_buf);
+
     // Transfert
-    const trans_buf = try gfx.Buffer.createTransferBuf(device, vert_size + idx_size);
+    const trans_buf = try gfx.Buffer.createTransferBuf(device, vert_size + idx_size + quad_size);
     defer c.SDL_ReleaseGPUTransferBuffer(device, trans_buf);
 
     // Data mapping
@@ -169,6 +212,7 @@ pub fn init(alloc: Allocator, device: *c.SDL_GPUDevice, tex_format: c.SDL_GPUTex
 
     @memcpy(data[0..vert_size], @as([*]const u8, @ptrCast(cube.vertices.ptr)));
     @memcpy(data[vert_size..][0..idx_size], @as([*]const u8, @ptrCast(cube.indices.ptr)));
+    @memcpy(data[vert_size + idx_size ..][0..quad_size], std.mem.sliceAsBytes(&QUAD_VERTICES));
     c.SDL_UnmapGPUTransferBuffer(device, trans_buf);
 
     // Copy
@@ -189,19 +233,25 @@ pub fn init(alloc: Allocator, device: *c.SDL_GPUDevice, tex_format: c.SDL_GPUTex
         false,
     );
 
+    c.SDL_UploadToGPUBuffer(
+        copy_pass,
+        &.{ .offset = vert_size + idx_size, .transfer_buffer = trans_buf },
+        &.{ .offset = 0, .size = quad_size, .buffer = quad_buf },
+        false,
+    );
+
     c.SDL_EndGPUCopyPass(copy_pass);
     try errify(c.SDL_SubmitGPUCommandBuffer(cmd));
 
-    const self = alloc.create(Self) catch unreachable;
-    self.* = .{
+    return .{
         .vert_buf = vert_buf,
         .idx_buf = idx_buf,
+        .quad_buf = quad_buf,
         .pipeline_fill = pipeline_fill,
         .pipeline_line = pipeline_line,
+        .pipeline_points = pipeline_points,
         .cube = cube,
     };
-
-    return self;
 }
 
 const sens: f32 = 0.005; // radians per pixel
@@ -263,6 +313,21 @@ fn draw(s: *anyopaque, render_pass: *c.SDL_GPURenderPass, config: Scene.State) E
     }, c.SDL_GPU_INDEXELEMENTSIZE_32BIT);
 
     c.SDL_DrawGPUIndexedPrimitives(render_pass, @intCast(self.cube.indices.len), 1, 0, 0, 0);
+
+    // Draw vertex markers
+    c.SDL_BindGPUGraphicsPipeline(render_pass, self.pipeline_points);
+
+    c.SDL_BindGPUVertexBuffers(
+        render_pass,
+        0,
+        &[_]c.SDL_GPUBufferBinding{
+            .{ .buffer = self.quad_buf, .offset = 0 },
+            .{ .buffer = self.vert_buf, .offset = 0 },
+        },
+        2,
+    );
+
+    c.SDL_DrawGPUPrimitives(render_pass, 6, @intCast(self.cube.vertices.len), 0, 0);
 }
 
 fn deinit(s: *anyopaque, alloc: Allocator, device: *c.SDL_GPUDevice) void {
@@ -270,8 +335,10 @@ fn deinit(s: *anyopaque, alloc: Allocator, device: *c.SDL_GPUDevice) void {
 
     c.SDL_ReleaseGPUBuffer(device, self.vert_buf);
     c.SDL_ReleaseGPUBuffer(device, self.idx_buf);
+    c.SDL_ReleaseGPUBuffer(device, self.quad_buf);
     c.SDL_ReleaseGPUGraphicsPipeline(device, self.pipeline_fill);
     c.SDL_ReleaseGPUGraphicsPipeline(device, self.pipeline_line);
+    c.SDL_ReleaseGPUGraphicsPipeline(device, self.pipeline_points);
 
     alloc.free(self.cube.vertices);
     alloc.free(self.cube.indices);

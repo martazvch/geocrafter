@@ -14,6 +14,7 @@ pub const VTable = struct {
     draw: *const fn (*anyopaque, *c.SDL_GPURenderPass, State) Error!void,
     deinit: *const fn (*anyopaque, Allocator, *c.SDL_GPUDevice) void,
 };
+
 pub const State = struct {
     dt: f32 = 0,
     wireframe: bool = false,

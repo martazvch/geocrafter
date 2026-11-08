@@ -5,11 +5,12 @@ const c = @import("c");
 const utils = @import("utils.zig");
 const errify = utils.errify;
 const App = @import("App.zig");
+const scenes = @import("scenes.zig");
 const clarg = @import("clarg");
 const Arg = clarg.Arg;
 
 const CliArgs = struct {
-    scene: Arg(App.Config.SceneName.triangle) = .{ .desc = "run specific scene", .short = 's' },
+    scene: Arg(scenes.Name.triangle) = .{ .desc = "run specific scene", .short = 's' },
 
     const Scene = enum {
         triangle,
@@ -17,7 +18,7 @@ const CliArgs = struct {
     };
 };
 
-const sdl_log = std.log.scoped(.sdl);
+const sdl_log = std.log.scoped(.app);
 var debug_alloc: std.heap.DebugAllocator(.{}) = .init;
 
 pub fn main(init: std.process.Init) !void {
@@ -47,9 +48,13 @@ pub fn main(init: std.process.Init) !void {
         .scene = parsed.scene,
     };
 
-    var app = App.init(alloc, config) catch |err| switch (err) {
+    var app = App.init(init.io, alloc, config) catch |err| switch (err) {
         error.AppError => {
             std.log.err("Interal error", .{});
+            return err;
+        },
+        error.UiInit, error.UiFrame => {
+            std.log.err("Ui error", .{});
             return err;
         },
         error.SdlError => {

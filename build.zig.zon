@@ -8,10 +8,6 @@
             .url = "https://github.com/castholm/SDL/archive/refs/tags/v0.6.0%2B3.4.18.tar.gz",
             .hash = "sdl-0.6.0+3.4.18-SDL--p-gqAGWpnfTLlhs0dgjDtc4P4_CHeNLGY_SX_Fv",
         },
-        .zimgui = .{
-            .url = "git+https://github.com/martazvch/zimgui#8627362cea000725a2e1829dc7f831bea1cebefe",
-            .hash = "zimgui-0.0.0-AmMy4QfmUgBJ_uUOI4iPzkq5ZbS0R5oXsIswVHAQ1Uxd",
-        },
         .translate_c = .{
             .url = "git+https://codeberg.org/ziglang/translate-c?ref=2.0.2#c11030012dc325d446474d17b78c242fd1d622ec",
             .hash = "translate_c-2.0.2-Q_BUWvBNBwBgPKQJPblip6M7AHNK_IPNPmyv4rSIQMQc",
@@ -23,6 +19,10 @@
         .clarg = .{
             .url = "https://github.com/martazvch/clarg/archive/refs/tags/0.3.1.tar.gz",
             .hash = "clarg-0.0.0-g4b0SbyBAAC9TkLVG33zDs8xT9EElEwRFiw9DngLtcrY",
+        },
+        .dvui = .{
+            .url = "git+https://github.com/david-vanderson/dvui?ref=main#76b90d415f2da915b1593feab601417e5519e687",
+            .hash = "dvui-0.6.0-dev-AQFJmR-tBAG86_97fGflee6tz_1SK8j2tDLyK-UAqYDC",
         },
     },
     .paths = .{

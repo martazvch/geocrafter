@@ -1,0 +1,27 @@
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+struct main0_out
+{
+    float4 out_color [[color(0)]];
+};
+
+struct main0_in
+{
+    float2 v_uv [[user(locn0)]];
+};
+
+fragment main0_out main0(main0_in in [[stage_in]])
+{
+    main0_out out = {};
+    if (dot(in.v_uv, in.v_uv) > 1.0)
+    {
+        discard_fragment();
+    }
+    out.out_color = float4(1.0, 0.1500000059604644775390625, 0.0500000007450580596923828125, 1.0);
+    out.out_color = float4(1.0, 0.0, 0.0, 1.0);
+    return out;
+}
+

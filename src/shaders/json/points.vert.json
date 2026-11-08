@@ -1,0 +1,1 @@
+{ "samplers": 0, "storage_textures": 0, "storage_buffers": 0, "uniform_buffers": 1, "inputs": [{ "name": "a_corner", "type": "float2", "location": 0 }, { "name": "a_position", "type": "float3", "location": 1 }], "outputs": [{ "name": "v_uv", "type": "float2", "location": 0 }] }

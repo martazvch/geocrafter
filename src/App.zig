@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
+const Io = std.Io;
 const c = @import("c");
 const m = @import("math");
 const utils = @import("utils.zig");
@@ -9,13 +10,18 @@ const Error = utils.Error;
 const Renderer = @import("Renderer.zig");
 const Camera = @import("Camera.zig");
 const Scene = @import("Scene.zig");
+const scenes = @import("scenes.zig");
+const Ui = @import("Ui.zig");
 
-ctx: Context,
+io: Io,
+alloc: Allocator,
 window: *c.SDL_Window,
 renderer: Renderer,
+ui: *Ui,
+scene: Scene,
+scene_state: Scene.State = .{},
 camera: Camera,
 running: bool = true,
-ui_wants_mouse: bool = false,
 
 const Self = @This();
 
@@ -23,28 +29,11 @@ pub const INIT_WIN_WIDTH = 1280;
 pub const INIT_WIN_HEIGHT = 720;
 
 pub const Config = struct {
-    scene: SceneName,
-
-    pub const SceneName = enum {
-        triangle,
-        triangle_dyn,
-        cube,
-        cube_sphere,
-    };
+    scene: scenes.Name,
 };
 
-pub const Context = struct {
-    alloc: Allocator,
-    scene_state: Scene.State,
-};
-
-pub fn init(alloc: Allocator, config: Config) Error!Self {
+pub fn init(io: Io, alloc: Allocator, config: Config) Error!Self {
     try errify(c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_AUDIO));
-
-    const ctx: Context = .{
-        .alloc = alloc,
-        .scene_state = .{},
-    };
 
     const window = try errify(c.SDL_CreateWindow(
         "Geocrafter",
@@ -54,36 +43,53 @@ pub fn init(alloc: Allocator, config: Config) Error!Self {
     ));
     errdefer c.SDL_DestroyWindow(window);
 
-    const renderer = try Renderer.init(window, config, &ctx);
+    const renderer = try Renderer.init(window);
+
+    var scene = try scenes.create(alloc, config.scene, renderer.device, renderer.color_format, Renderer.DEPTH_FORMAT);
+    errdefer scene.deinit(alloc, renderer.device);
+
+    const ui = try Ui.create(io, alloc, window, renderer.device);
+    errdefer ui.destroy(alloc);
 
     return .{
-        .ctx = ctx,
+        .io = io,
+        .alloc = alloc,
         .window = window,
         .renderer = renderer,
+        .ui = ui,
+        .scene = scene,
         .camera = .init(INIT_WIN_WIDTH, INIT_WIN_HEIGHT),
     };
 }
 
 pub fn deinit(self: *Self) void {
-    self.renderer.deinit(self.ctx);
+    self.renderer.waitIdle();
+    self.ui.destroy(self.alloc);
+    self.scene.deinit(self.alloc, self.renderer.device);
+    self.renderer.deinit();
     c.SDL_DestroyWindow(self.window);
 }
 
 pub fn run(self: *Self) Error!void {
-    var frames: usize = 0;
-    var last_time = c.SDL_GetTicksNS();
+    var acc: u64 = 0;
+    var frames: u32 = 0;
+    var last = c.SDL_GetTicksNS();
 
     while (self.running) {
-        const cur_time = c.SDL_GetTicksNS();
-        const dt = cur_time - last_time;
+        const now = c.SDL_GetTicksNS();
+        const dt = now - last;
+        last = now;
 
         if (builtin.mode == .debug) {
+            acc += dt;
             frames += 1;
-            if (dt >= 1_000_000) {
-                var buf: [100]u8 = undefined;
+
+            if (acc >= std.time.ns_per_s) {
+                var buf: [64]u8 = undefined;
                 const written = std.fmt.bufPrintSentinel(&buf, "Geocrafter - FPS {}", .{frames}, 0) catch utils.oom();
                 try errify(c.SDL_SetWindowTitle(self.window, written));
-                last_time = cur_time;
+
+                acc = 0;
                 frames = 0;
             }
         }
@@ -92,57 +98,72 @@ pub fn run(self: *Self) Error!void {
     }
 }
 
-fn handleEvents(self: *Self) void {
-    var event: c.SDL_Event = undefined;
-    while (c.SDL_PollEvent(&event)) {
-        // First: ImGui_ImplSDL3_ProcessEvent(&event)
-        switch (event.type) {
-            c.SDL_EVENT_QUIT => self.running = false,
-            c.SDL_EVENT_MOUSE_MOTION => {
-                if (event.button.button == c.SDL_BUTTON_MIDDLE) {
-                    self.ctx.scene_state.dragging = true;
-                }
+pub fn frame(self: *Self, dt: f32) Error!void {
+    self.scene_state.dt = dt;
+    self.scene_state.mouse_mvt = null;
 
-                if ((event.motion.state & c.SDL_BUTTON_MMASK) != 0) {
-                    const mvt = m.Vec2.new(event.motion.xrel, event.motion.yrel);
-                    const state = &self.ctx.scene_state;
+    const f = try self.renderer.beginFrame();
+    if (f.resized) {
+        self.camera.resize(f.width, f.height);
+    }
+
+    // Minimized window: no swapchain texture, so no drawing and no dvui frame
+    // but events must still be processed (restore, quit...)
+    const swapchain = f.swapchain orelse {
+        self.handleEvents(false);
+        try self.renderer.endFrame(f);
+        return;
+    };
+
+    try self.ui.beginFrame(f.cmd, swapchain);
+    self.handleEvents(true);
+
+    try self.renderer.renderScene(f, &self.scene, &self.camera, self.scene_state);
+
+    try self.ui.endFrame();
+    try self.renderer.endFrame(f);
+}
+
+fn handleEvents(self: *Self, ui_active: bool) void {
+    var ev: c.SDL_Event = undefined;
+    while (c.SDL_PollEvent(&ev)) {
+        // Always handled by the app, never offered to dvui.
+        if (ev.type == c.SDL_EVENT_QUIT) {
+            self.running = false;
+            continue;
+        }
+
+        // A button release must always reach app, even if dvui consumes it too
+        // otherwise a drag could get stuck for example
+        if (ev.type == c.SDL_EVENT_MOUSE_BUTTON_UP and ev.button.button == c.SDL_BUTTON_MIDDLE) {
+            self.scene_state.dragging = false;
+        }
+
+        // dvui first, it returns true when the event belongs to a floating window
+        if (ui_active and self.ui.handleEvent(ev)) {
+            continue;
+        }
+
+        switch (ev.type) {
+            c.SDL_EVENT_MOUSE_BUTTON_DOWN => {
+                if (ev.button.button == c.SDL_BUTTON_MIDDLE) {
+                    self.scene_state.dragging = true;
+                }
+            },
+            c.SDL_EVENT_MOUSE_MOTION => {
+                if ((ev.motion.state & c.SDL_BUTTON_MMASK) != 0) {
+                    const mvt = m.Vec2.new(ev.motion.xrel, ev.motion.yrel);
+                    const state = &self.scene_state;
                     state.mouse_mvt = if (state.mouse_mvt) |d| d.add(mvt) else mvt;
                 }
             },
-            c.SDL_EVENT_MOUSE_BUTTON_UP => {
-                if (event.button.button == c.SDL_BUTTON_MIDDLE) {
-                    self.ctx.scene_state.dragging = false;
-                }
-            },
-            c.SDL_EVENT_KEY_DOWN => switch (event.key.key) {
+            c.SDL_EVENT_MOUSE_WHEEL => self.camera.zoom(ev.wheel.y),
+            c.SDL_EVENT_KEY_DOWN => switch (ev.key.key) {
                 c.SDLK_Q, c.SDLK_ESCAPE => self.running = false,
-                c.SDLK_W => self.ctx.scene_state.wireframe = !self.ctx.scene_state.wireframe,
+                c.SDLK_W => self.scene_state.wireframe = !self.scene_state.wireframe,
                 else => {},
-            },
-            c.SDL_EVENT_MOUSE_WHEEL => {
-                self.camera.zoom(event.wheel.y);
-                // if (!self.ui_wants_mouse) self.camera.zoom(ev.wheel.y, self.planet.params.radius);
             },
             else => {},
         }
     }
-}
-
-fn drawUi(self: *Self) void {
-    // ImGui panels live in their own file. They only mutate params and set flags:
-    //
-    //   if (zgui.sliderFloat("Amplitude", .{ .v = &p.amplitude, .min = 0, .max = 0.3 }))
-    //       self.planet.dirty.heightmap = true;
-    //
-    // self.ui_wants_mouse = imgui_io.WantCaptureMouse;
-    _ = self;
-}
-
-pub fn frame(self: *Self, dt: f32) Error!void {
-    self.ctx.scene_state.dt = dt;
-    self.ctx.scene_state.mouse_mvt = null;
-    self.handleEvents();
-    self.drawUi();
-    // if (self.planet.dirty.any()) self.planet.regenerate(&self.renderer);
-    try self.renderer.drawFrame(&self.camera, self.ctx);
 }

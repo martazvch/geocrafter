@@ -1,5 +1,6 @@
 pub const SdlError = error{SdlError};
-pub const Error = error{AppError} || SdlError;
+pub const UiError = error{ UiInit, UiFrame };
+pub const Error = error{AppError} || SdlError || UiError;
 
 pub fn oom() noreturn {
     @panic("OOM");

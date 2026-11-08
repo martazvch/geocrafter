@@ -1,0 +1,1 @@
+{ "samplers": 0, "storage_textures": 0, "storage_buffers": 0, "uniform_buffers": 0, "inputs": [{ "name": "v_uv", "type": "float2", "location": 0 }], "outputs": [{ "name": "out_color", "type": "float4", "location": 0 }] }

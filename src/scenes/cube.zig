@@ -68,11 +68,16 @@ const CamUniform = extern struct {
     model: m.Mat4,
 };
 
-pub fn init(alloc: Allocator, device: *c.SDL_GPUDevice, tex_format: c.SDL_GPUTextureFormat, depth_format: c.SDL_GPUTextureFormat) Error!*Self {
+pub fn init(alloc: Allocator, device: *c.SDL_GPUDevice, tex_format: c.SDL_GPUTextureFormat, depth_format: c.SDL_GPUTextureFormat) Error!Self {
     const pipeline_fill = try gfx.Pipeline.create(alloc, device, "cube", .{
-        .vertex_pitch = @sizeOf(Vertex),
         .tex_format = tex_format,
         .depth_format = depth_format,
+        .vert_buffers = &[_]c.SDL_GPUVertexBufferDescription{.{
+            .slot = 0,
+            .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX,
+            .pitch = @sizeOf(Vertex),
+            .instance_step_rate = 0,
+        }},
         .attrs = &[_]c.SDL_GPUVertexAttribute{
             .{ .buffer_slot = 0, .location = 0, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, .offset = 0 },
             .{ .buffer_slot = 0, .location = 1, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, .offset = 3 * @sizeOf(f32) },
@@ -81,10 +86,15 @@ pub fn init(alloc: Allocator, device: *c.SDL_GPUDevice, tex_format: c.SDL_GPUTex
     errdefer c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline_fill);
 
     const pipeline_line = try gfx.Pipeline.create(alloc, device, "cube", .{
-        .vertex_pitch = @sizeOf(Vertex),
         .tex_format = tex_format,
         .depth_format = depth_format,
         .fill_mode = c.SDL_GPU_FILLMODE_LINE,
+        .vert_buffers = &[_]c.SDL_GPUVertexBufferDescription{.{
+            .slot = 0,
+            .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX,
+            .pitch = @sizeOf(Vertex),
+            .instance_step_rate = 0,
+        }},
         .attrs = &[_]c.SDL_GPUVertexAttribute{
             .{ .buffer_slot = 0, .location = 0, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, .offset = 0 },
             .{ .buffer_slot = 0, .location = 1, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, .offset = 3 * @sizeOf(f32) },
@@ -133,15 +143,12 @@ pub fn init(alloc: Allocator, device: *c.SDL_GPUDevice, tex_format: c.SDL_GPUTex
     c.SDL_EndGPUCopyPass(copy_pass);
     try errify(c.SDL_SubmitGPUCommandBuffer(cmd));
 
-    const self = alloc.create(Self) catch unreachable;
-    self.* = .{
+    return .{
         .vert_buf = vert_buf,
         .idx_buf = idx_buf,
         .pipeline_fill = pipeline_fill,
         .pipeline_line = pipeline_line,
     };
-
-    return self;
 }
 
 fn update(_: *anyopaque, _: *c.SDL_GPUDevice, cmd: *c.SDL_GPUCommandBuffer, cam: *const Camera, _: Scene.State) Error!void {

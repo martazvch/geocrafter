@@ -5,7 +5,7 @@ using namespace metal;
 
 struct UniformBlock
 {
-    float time;
+    uint time;
 };
 
 struct main0_out
@@ -18,11 +18,10 @@ struct main0_in
     float4 v_color [[user(locn0)]];
 };
 
-fragment main0_out main0(main0_in in [[stage_in]], constant UniformBlock& _11 [[buffer(0)]])
+fragment main0_out main0(main0_in in [[stage_in]])
 {
     main0_out out = {};
-    float pulse = (sin(_11.time * 2.0) * 0.5) + 0.5;
-    out.FragColor = float4(in.v_color.xyz * (0.800000011920928955078125 + (pulse * 0.5)), in.v_color.w);
+    out.FragColor = in.v_color;
     return out;
 }
 

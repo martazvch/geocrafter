@@ -36,7 +36,7 @@ const Uniform = extern struct {
     _pad: [3]f32 = @splat(0),
 };
 
-pub fn init(alloc: Allocator, device: *c.SDL_GPUDevice, tex_format: c.SDL_GPUTextureFormat, depth_format: c.SDL_GPUTextureFormat) Error!*Self {
+pub fn init(alloc: Allocator, device: *c.SDL_GPUDevice, tex_format: c.SDL_GPUTextureFormat, depth_format: c.SDL_GPUTextureFormat) Error!Self {
     // Vertex
     const vert_buf = try gfx.Buffer.createVertBuf(device, vert_size);
     errdefer c.SDL_ReleaseGPUBuffer(device, vert_buf);
@@ -54,9 +54,14 @@ pub fn init(alloc: Allocator, device: *c.SDL_GPUDevice, tex_format: c.SDL_GPUTex
     c.SDL_UnmapGPUTransferBuffer(device, trans_buf);
 
     const pipeline = try gfx.Pipeline.create(alloc, device, "triangle", .{
-        .vertex_pitch = @sizeOf(Vertex),
         .tex_format = tex_format,
         .depth_format = depth_format,
+        .vert_buffers = &[_]c.SDL_GPUVertexBufferDescription{.{
+            .slot = 0,
+            .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX,
+            .instance_step_rate = 0,
+            .pitch = @sizeOf(Vertex),
+        }},
         .attrs = &[_]c.SDL_GPUVertexAttribute{
             .{ .buffer_slot = 0, .location = 0, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, .offset = 0 },
             .{ .buffer_slot = 0, .location = 1, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, .offset = 3 * @sizeOf(f32) },
@@ -84,13 +89,10 @@ pub fn init(alloc: Allocator, device: *c.SDL_GPUDevice, tex_format: c.SDL_GPUTex
     c.SDL_EndGPUCopyPass(copy_pass);
     try errify(c.SDL_SubmitGPUCommandBuffer(cmd));
 
-    const self = alloc.create(Self) catch unreachable;
-    self.* = .{
+    return .{
         .vert_buf = vert_buf,
         .pipeline = pipeline,
     };
-
-    return self;
 }
 
 fn update(_: *anyopaque, _: *c.SDL_GPUDevice, cmd: *c.SDL_GPUCommandBuffer, _: *const Camera, _: Scene.State) Error!void {

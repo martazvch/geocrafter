@@ -7,8 +7,8 @@ const Error = utils.Error;
 const Shader = @import("Shader.zig");
 
 pub const Desc = struct {
-    vertex_pitch: u32,
     attrs: []const c.SDL_GPUVertexAttribute,
+    vert_buffers: []const c.SDL_GPUVertexBufferDescription,
     tex_format: c.SDL_GPUTextureFormat,
     depth_format: c.SDL_GPUTextureFormat,
     fill_mode: c.SDL_GPUFillMode = c.SDL_GPU_FILLMODE_FILL,
@@ -34,15 +34,9 @@ pub fn create(
     info.fragment_shader = shader.frag;
     info.primitive_type = c.SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
 
-    const vert_buf = [_]c.SDL_GPUVertexBufferDescription{.{
-        .slot = 0,
-        .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX,
-        .instance_step_rate = 0,
-        .pitch = desc.vertex_pitch,
-    }};
     info.vertex_input_state = .{
-        .vertex_buffer_descriptions = &vert_buf,
-        .num_vertex_buffers = 1,
+        .vertex_buffer_descriptions = desc.vert_buffers.ptr,
+        .num_vertex_buffers = @intCast(desc.vert_buffers.len),
         .vertex_attributes = desc.attrs.ptr,
         .num_vertex_attributes = @intCast(desc.attrs.len),
     };
