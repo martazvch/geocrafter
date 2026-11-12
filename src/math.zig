@@ -8,5 +8,7 @@ pub const Mat2 = zlm.Mat2;
 pub const Mat3 = zlm.Mat3;
 pub const Mat4 = zlm.Mat4;
 
+pub const Quat = @import("Quat.zig");
+
 pub const r2d = zlm.toDegrees;
 pub const d2r = zlm.toRadians;

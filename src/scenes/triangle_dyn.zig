@@ -8,28 +8,15 @@ const App = @import("../App.zig");
 const gfx = @import("../gfx.zig");
 const Scene = @import("../Scene.zig");
 const Camera = @import("../Camera.zig");
+const Triangle = @import("../geom/Triangle.zig");
+const Vertex = @import("../geom/vertex.zig").Vertex;
 
 vert_buf: *c.SDL_GPUBuffer,
 trans_buf: *c.SDL_GPUTransferBuffer,
 pipeline: *c.SDL_GPUGraphicsPipeline,
+triangle: Triangle = .{},
 
 const Self = @This();
-
-const Vertex = extern struct {
-    x: f32,
-    y: f32,
-    z: f32,
-    r: f32,
-    g: f32,
-    b: f32,
-    a: f32,
-};
-var vertices = [_]Vertex{
-    .{ .x = 0, .y = 0.5, .z = 0, .r = 1, .g = 0, .b = 0, .a = 1 },
-    .{ .x = -0.5, .y = -0.5, .z = 0, .r = 1, .g = 1, .b = 0, .a = 1 },
-    .{ .x = 0.5, .y = -0.5, .z = 0, .r = 1, .g = 0, .b = 1, .a = 1 },
-};
-const vert_size = @sizeOf(@TypeOf(vertices));
 
 const Uniform = extern struct {
     float: f32,
@@ -38,17 +25,19 @@ const Uniform = extern struct {
 };
 
 pub fn init(alloc: Allocator, device: *c.SDL_GPUDevice, tex_format: c.SDL_GPUTextureFormat, depth_format: c.SDL_GPUTextureFormat) Error!Self {
+    const triangle: Triangle = .{};
+
     // Vertex
-    const vert_buf = try gfx.Buffer.createVertBuf(device, vert_size);
+    const vert_buf = try gfx.buffer.createVertBuf(device, triangle.vert_size);
     errdefer c.SDL_ReleaseGPUBuffer(device, vert_buf);
 
     // Transfert
-    const trans_buf = try gfx.Buffer.createTransferBuf(device, vert_size);
+    const trans_buf = try gfx.buffer.createTransferBuf(device, triangle.vert_size);
     // In this case, only used once in init
     errdefer c.SDL_ReleaseGPUTransferBuffer(device, trans_buf);
 
     // Pipeline
-    const pipeline = try gfx.Pipeline.create(alloc, device, "triangle", .{
+    const pipeline = try gfx.pipeline.create(alloc, device, "triangle", .{
         .tex_format = tex_format,
         .depth_format = depth_format,
         .vert_buffers = &[_]c.SDL_GPUVertexBufferDescription{.{
@@ -68,6 +57,7 @@ pub fn init(alloc: Allocator, device: *c.SDL_GPUDevice, tex_format: c.SDL_GPUTex
         .vert_buf = vert_buf,
         .trans_buf = trans_buf,
         .pipeline = pipeline,
+        .triangle = triangle,
     };
 }
 
@@ -84,32 +74,32 @@ fn update(s: *anyopaque, device: *c.SDL_GPUDevice, cmd: *c.SDL_GPUCommandBuffer,
     // Copy
     const copy_pass = c.SDL_BeginGPUCopyPass(cmd);
 
-    vertices[0].x += 0.001;
+    self.triangle.vertices[0].x += 0.001;
 
     // Data mapping
     const data: [*]u8 = @ptrCast(@alignCast(
         try errify(c.SDL_MapGPUTransferBuffer(device, self.trans_buf, false)),
     ));
-    @memcpy(data, std.mem.asBytes(&vertices));
+    @memcpy(data, std.mem.asBytes(&self.triangle.vertices));
     c.SDL_UnmapGPUTransferBuffer(device, self.trans_buf);
 
-    const trans_buf_lococ = c.SDL_GPUTransferBufferLocation{
+    const trans_buf_loc = c.SDL_GPUTransferBufferLocation{
         .offset = 0,
         .transfer_buffer = self.trans_buf,
     };
 
     const buf_region = c.SDL_GPUBufferRegion{
         .offset = 0,
-        .size = @sizeOf(@TypeOf(vertices)),
+        .size = @sizeOf(@TypeOf(self.triangle.vertices)),
         .buffer = self.vert_buf,
     };
 
-    c.SDL_UploadToGPUBuffer(copy_pass, &trans_buf_lococ, &buf_region, true);
+    c.SDL_UploadToGPUBuffer(copy_pass, &trans_buf_loc, &buf_region, true);
 
     c.SDL_EndGPUCopyPass(copy_pass);
 }
 
-fn draw(s: *anyopaque, render_pass: *c.SDL_GPURenderPass, _: Scene.State) Error!void {
+fn draw(s: *anyopaque, render_pass: *c.SDL_GPURenderPass, _: *c.SDL_GPUCommandBuffer, _: Scene.State) Error!void {
     const self: *Self = @ptrCast(@alignCast(s));
 
     // Draw
@@ -127,6 +117,8 @@ fn draw(s: *anyopaque, render_pass: *c.SDL_GPURenderPass, _: Scene.State) Error!
     c.SDL_DrawGPUPrimitives(render_pass, 3, 1, 0, 0);
 }
 
+fn drawUi(_: *anyopaque) void {}
+
 fn deinit(s: *anyopaque, alloc: Allocator, device: *c.SDL_GPUDevice) void {
     const self: *Self = @ptrCast(@alignCast(s));
 
@@ -142,6 +134,7 @@ pub fn scene(self: *Self) Scene {
         .vtable = &.{
             .update = update,
             .draw = draw,
+            .drawUi = drawUi,
             .deinit = deinit,
         },
     };

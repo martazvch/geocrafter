@@ -12,8 +12,9 @@ pub const Desc = struct {
     tex_format: c.SDL_GPUTextureFormat,
     depth_format: c.SDL_GPUTextureFormat,
     fill_mode: c.SDL_GPUFillMode = c.SDL_GPU_FILLMODE_FILL,
-    cull_mode: c.SDL_GPUCullMode = c.SDL_GPU_CULLMODE_NONE,
-    enable_depth: bool = true,
+    cull_mode: c.SDL_GPUCullMode = c.SDL_GPU_CULLMODE_BACK,
+    enable_depth_test: bool = true,
+    enable_depth_write: bool = true,
 };
 
 pub fn create(
@@ -44,13 +45,13 @@ pub fn create(
     var target_info = std.mem.zeroes(c.SDL_GPUGraphicsPipelineTargetInfo);
     target_info.num_color_targets = 1;
     target_info.color_target_descriptions = &color_target;
-    target_info.has_depth_stencil_target = desc.enable_depth;
+    target_info.has_depth_stencil_target = desc.enable_depth_test;
     target_info.depth_stencil_format = desc.depth_format;
     info.target_info = target_info;
 
     var depth_state = std.mem.zeroes(c.SDL_GPUDepthStencilState);
-    depth_state.enable_depth_test = desc.enable_depth;
-    depth_state.enable_depth_write = desc.enable_depth;
+    depth_state.enable_depth_test = desc.enable_depth_test;
+    depth_state.enable_depth_write = desc.enable_depth_write;
     depth_state.compare_op = c.SDL_GPU_COMPAREOP_LESS;
     info.depth_stencil_state = depth_state;
 
@@ -66,3 +67,30 @@ pub fn create(
 
     return errify(c.SDL_CreateGPUGraphicsPipeline(device, &info));
 }
+
+pub const Pipelines = struct {
+    fill: *c.SDL_GPUGraphicsPipeline,
+    line: *c.SDL_GPUGraphicsPipeline,
+
+    pub fn init(
+        alloc: Allocator,
+        device: *c.SDL_GPUDevice,
+        comptime shader_name: []const u8,
+        common_desc: Desc,
+    ) Error!Pipelines {
+        var desc = common_desc;
+        desc.fill_mode = c.SDL_GPU_FILLMODE_FILL;
+
+        const pipeline_fill = try create(alloc, device, shader_name, desc);
+
+        desc.fill_mode = c.SDL_GPU_FILLMODE_LINE;
+        const pipeline_line = try create(alloc, device, shader_name, desc);
+
+        return .{ .fill = pipeline_fill, .line = pipeline_line };
+    }
+
+    pub fn deinit(self: *Pipelines, device: *c.SDL_GPUDevice) void {
+        c.SDL_ReleaseGPUGraphicsPipeline(device, self.fill);
+        c.SDL_ReleaseGPUGraphicsPipeline(device, self.line);
+    }
+};

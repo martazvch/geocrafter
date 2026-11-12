@@ -7,6 +7,7 @@ struct UniformCamera
 {
     float4x4 mvp;
     float4x4 model;
+    float4 marker;
 };
 
 struct main0_out
@@ -21,19 +22,18 @@ struct main0_in
     float3 a_position [[attribute(1)]];
 };
 
-vertex main0_out main0(main0_in in [[stage_in]], constant UniformCamera& _22 [[buffer(0)]])
+vertex main0_out main0(main0_in in [[stage_in]], constant UniformCamera& _19 [[buffer(0)]])
 {
     main0_out out = {};
     out.v_uv = in.a_corner;
-    float radius = 0.004999999888241291046142578125;
-    float4 world_pos = _22.model * float4(in.a_position, 1.0);
-    float4 clip_pos = _22.mvp * float4(in.a_position, 1.0);
-    float _54 = clip_pos.w;
-    float4 _56 = clip_pos;
-    float2 _58 = _56.xy + ((in.a_corner * radius) * _54);
-    clip_pos.x = _58.x;
-    clip_pos.y = _58.y;
-    out.gl_Position = clip_pos;
+    float4 clip = _19.mvp * float4(in.a_position, 1.0);
+    float2 offset = (in.a_corner * _19.marker.y) * float2(1.0 / _19.marker.x, 1.0);
+    float4 _52 = clip;
+    float2 _54 = _52.xy + offset;
+    clip.x = _54.x;
+    clip.y = _54.y;
+    clip.z -= (_19.marker.z * clip.w);
+    out.gl_Position = clip;
     return out;
 }
 

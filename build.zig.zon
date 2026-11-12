@@ -21,8 +21,8 @@
             .hash = "clarg-0.0.0-g4b0SbyBAAC9TkLVG33zDs8xT9EElEwRFiw9DngLtcrY",
         },
         .dvui = .{
-            .url = "git+https://github.com/david-vanderson/dvui?ref=main#76b90d415f2da915b1593feab601417e5519e687",
-            .hash = "dvui-0.6.0-dev-AQFJmR-tBAG86_97fGflee6tz_1SK8j2tDLyK-UAqYDC",
+            .url = "git+https://github.com/david-vanderson/dvui?ref=main#dae0c4345e2e4c9551871065239a2c665e26a04f",
+            .hash = "dvui-0.6.0-dev-AQFJmWeoBAGEAGoiyGI2fZqj_B4TTn00S1uJ1Yh0HF1n",
         },
     },
     .paths = .{

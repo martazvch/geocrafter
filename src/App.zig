@@ -11,6 +11,7 @@ const Renderer = @import("Renderer.zig");
 const Camera = @import("Camera.zig");
 const Scene = @import("Scene.zig");
 const scenes = @import("scenes.zig");
+const dvui = @import("dvui");
 const Ui = @import("Ui.zig");
 
 io: Io,
@@ -19,14 +20,17 @@ window: *c.SDL_Window,
 renderer: Renderer,
 ui: *Ui,
 scene: Scene,
-scene_state: Scene.State = .{},
+scene_state: Scene.State,
 camera: Camera,
 running: bool = true,
 
+// UI
+show_demo: bool = false,
+
 const Self = @This();
 
-pub const INIT_WIN_WIDTH = 1280;
-pub const INIT_WIN_HEIGHT = 720;
+pub const INIT_WIN_WIDTH = 1920;
+pub const INIT_WIN_HEIGHT = 1080;
 
 pub const Config = struct {
     scene: scenes.Name,
@@ -58,6 +62,12 @@ pub fn init(io: Io, alloc: Allocator, config: Config) Error!Self {
         .renderer = renderer,
         .ui = ui,
         .scene = scene,
+        .scene_state = .{
+            .arcball = .{
+                .width = INIT_WIN_WIDTH,
+                .height = INIT_WIN_HEIGHT,
+            },
+        },
         .camera = .init(INIT_WIN_WIDTH, INIT_WIN_HEIGHT),
     };
 }
@@ -100,23 +110,27 @@ pub fn run(self: *Self) Error!void {
 
 pub fn frame(self: *Self, dt: f32) Error!void {
     self.scene_state.dt = dt;
-    self.scene_state.mouse_mvt = null;
+    // self.scene_state.mouse_mvt = null;
 
     const f = try self.renderer.beginFrame();
     if (f.resized) {
         self.camera.resize(f.width, f.height);
+        self.scene_state.arcball.resize(@floatFromInt(f.width), @floatFromInt(f.height));
     }
 
     // Minimized window: no swapchain texture, so no drawing and no dvui frame
     // but events must still be processed (restore, quit...)
     const swapchain = f.swapchain orelse {
-        self.handleEvents(false);
+        self.handleEvents(false, dt);
         try self.renderer.endFrame(f);
         return;
     };
 
     try self.ui.beginFrame(f.cmd, swapchain);
-    self.handleEvents(true);
+    self.handleEvents(true, dt);
+    self.scene_state.arcball.integrateSpin(dt);
+
+    self.uiFrame();
 
     try self.renderer.renderScene(f, &self.scene, &self.camera, self.scene_state);
 
@@ -124,7 +138,12 @@ pub fn frame(self: *Self, dt: f32) Error!void {
     try self.renderer.endFrame(f);
 }
 
-fn handleEvents(self: *Self, ui_active: bool) void {
+fn uiFrame(self: *Self) void {
+    self.scene.drawUi();
+    dvui.Examples.demo(.lite);
+}
+
+fn handleEvents(self: *Self, ui_active: bool, dt: f32) void {
     var ev: c.SDL_Event = undefined;
     while (c.SDL_PollEvent(&ev)) {
         // Always handled by the app, never offered to dvui.
@@ -136,34 +155,33 @@ fn handleEvents(self: *Self, ui_active: bool) void {
         // A button release must always reach app, even if dvui consumes it too
         // otherwise a drag could get stuck for example
         if (ev.type == c.SDL_EVENT_MOUSE_BUTTON_UP and ev.button.button == c.SDL_BUTTON_MIDDLE) {
-            self.scene_state.dragging = false;
-        }
-
-        // dvui first, it returns true when the event belongs to a floating window
-        if (ui_active and self.ui.handleEvent(ev)) {
-            continue;
+            self.scene_state.arcball.end();
         }
 
         switch (ev.type) {
             c.SDL_EVENT_MOUSE_BUTTON_DOWN => {
                 if (ev.button.button == c.SDL_BUTTON_MIDDLE) {
-                    self.scene_state.dragging = true;
+                    self.scene_state.arcball.begin(ev.button.x, ev.button.y);
                 }
             },
             c.SDL_EVENT_MOUSE_MOTION => {
                 if ((ev.motion.state & c.SDL_BUTTON_MMASK) != 0) {
-                    const mvt = m.Vec2.new(ev.motion.xrel, ev.motion.yrel);
-                    const state = &self.scene_state;
-                    state.mouse_mvt = if (state.mouse_mvt) |d| d.add(mvt) else mvt;
+                    self.scene_state.arcball.update(ev.motion.x, ev.motion.y, dt);
                 }
             },
             c.SDL_EVENT_MOUSE_WHEEL => self.camera.zoom(ev.wheel.y),
             c.SDL_EVENT_KEY_DOWN => switch (ev.key.key) {
                 c.SDLK_Q, c.SDLK_ESCAPE => self.running = false,
+                c.SDLK_H => dvui.Examples.show_demo_window = !dvui.Examples.show_demo_window,
                 c.SDLK_W => self.scene_state.wireframe = !self.scene_state.wireframe,
                 else => {},
             },
             else => {},
+        }
+
+        // dvui first, it returns true when the event belongs to a floating window
+        if (ui_active and self.ui.handleEvent(ev)) {
+            continue;
         }
     }
 }

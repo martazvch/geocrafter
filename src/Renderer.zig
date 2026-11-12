@@ -23,7 +23,6 @@ pub const Frame = struct {
     swapchain: ?*c.SDL_GPUTexture,
     width: u32,
     height: u32,
-    /// true on the first frame and whenever the swapchain size changed
     resized: bool,
 };
 
@@ -87,8 +86,7 @@ pub fn beginFrame(self: *Self) Error!Frame {
 }
 
 /// Submits the command buffer, which also presents the swapchain texture.
-pub fn endFrame(self: *Self, frame: Frame) Error!void {
-    _ = self;
+pub fn endFrame(_: *Self, frame: Frame) Error!void {
     try errify(c.SDL_SubmitGPUCommandBuffer(frame.cmd));
 }
 
@@ -125,7 +123,7 @@ pub fn renderScene(
     const pass = try errify(c.SDL_BeginGPURenderPass(frame.cmd, &target, 1, &depth));
     // defer to ensure end of pass even if scene draw fails
     defer c.SDL_EndGPURenderPass(pass);
-    try scene.draw(pass, state);
+    try scene.draw(pass, frame.cmd, state);
 }
 
 fn ensureDepth(self: *Self, w: u32, h: u32) Error!bool {
@@ -136,8 +134,6 @@ fn ensureDepth(self: *Self, w: u32, h: u32) Error!bool {
     if (self.depth_tex) |old| {
         c.SDL_ReleaseGPUTexture(self.device, old);
     }
-    // So deinit never double-releases if creation fails
-    self.depth_tex = null;
 
     self.depth_tex = try errify(c.SDL_CreateGPUTexture(self.device, &.{
         .type = c.SDL_GPU_TEXTURETYPE_2D,

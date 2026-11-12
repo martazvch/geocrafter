@@ -11,6 +11,7 @@ pub const Name = enum {
     triangle_dyn,
     cube,
     cube_sphere,
+    plane_noise,
 };
 
 pub fn create(
@@ -21,10 +22,11 @@ pub fn create(
     depth_format: c.SDL_GPUTextureFormat,
 ) Error!Scene {
     return switch (name) {
-        .triangle => make(@import("scenes/triangle.zig"), alloc, device, color_format, depth_format),
+        .triangle => make(@import("scenes/triangle_simple.zig"), alloc, device, color_format, depth_format),
         .triangle_dyn => make(@import("scenes/triangle_dyn.zig"), alloc, device, color_format, depth_format),
-        .cube => make(@import("scenes/cube.zig"), alloc, device, color_format, depth_format),
+        .cube => make(@import("scenes/cube_simple.zig"), alloc, device, color_format, depth_format),
         .cube_sphere => make(@import("scenes/cube_sphere.zig"), alloc, device, color_format, depth_format),
+        .plane_noise => make(@import("scenes/plane_noise.zig"), alloc, device, color_format, depth_format),
     };
 }
 

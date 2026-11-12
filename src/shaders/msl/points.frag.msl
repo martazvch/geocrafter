@@ -20,8 +20,7 @@ fragment main0_out main0(main0_in in [[stage_in]])
     {
         discard_fragment();
     }
-    out.out_color = float4(1.0, 0.1500000059604644775390625, 0.0500000007450580596923828125, 1.0);
-    out.out_color = float4(1.0, 0.0, 0.0, 1.0);
+    out.out_color = float4(0.0, 0.0, 0.0, 1.0);
     return out;
 }
 

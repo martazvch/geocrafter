@@ -8,6 +8,5 @@ void main() {
         discard;
     }
 
-    out_color = vec4(1.0, 0.15, 0.05, 1.0);
-    out_color = vec4(1.0, 0.0, 0.0, 1.0);
+    out_color = vec4(0.0, 0.0, 0.0, 1.0);
 }
